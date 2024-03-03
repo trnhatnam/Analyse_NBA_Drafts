@@ -1,0 +1,42 @@
+---
+title: "Projet analyse de données - NBA drafts"
+author: "TRINH Nhat-nam, SOBCZYK Gabriel - MAIN4"
+date: "2024-03-01"
+output: html_document
+---
+# 0. Prétraitement des données
+```{r}
+nba_drafts_data = read.csv2("all_seasons.csv", sep=",", dec=".", header=TRUE, row.names = 1)
+head(nba_drafts_data)
+str(nba_drafts_data)
+dim(nba_drafts_data)
+```
+
+Résumé : 
+```{r}
+summary(nba_drafts_data)
+```
+On enlève les lignes nulles
+```{r}
+nba_draft_data = na.omit(nba_drafts_data)
+dim(nba_draft_data)
+```
+
+
+On voit que draft_year, draft_round et que draft_number sont traités comme des caractères plutôt que des nombres
+```{r}
+nba_drafts_data$draft_year = as.numeric(nba_drafts_data$draft_year)
+nba_drafts_data$draft_round = as.numeric(nba_drafts_data$draft_round)
+nba_drafts_data$draft_number = as.numeric(nba_drafts_data$draft_number)
+str(nba_drafts_data)
+```
+
+#1. Etude du style de jeu avec les caractéristiques du joueurs
+
+Pour une étude d'ACP, on va d'abord chercher à normaliser les données pour éviter que les grandes variances influencent les données.
+```{r}
+nba_drafts_data_study_1 = nba_drafts_data[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct")]
+nba_drafts_data_study_1 = scale(nba_drafts_data_study_1)
+head(nba_drafts_data_study_1)
+```
+
