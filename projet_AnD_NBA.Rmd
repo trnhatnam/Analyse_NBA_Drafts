@@ -1,0 +1,300 @@
+---
+title: "Projet analyse de données - NBA drafts"
+author: "TRINH Nhat-nam, SOBCZYK Gabriel - MAIN4"
+date: "2024-03-01"
+output: html_document
+---
+
+# 0. Prétraitement des données
+
+```{r}
+nba_drafts_data = read.csv2("all_seasons.csv", sep=",", dec=".", header=TRUE, row.names = 1)
+head(nba_drafts_data)
+str(nba_drafts_data)
+dim(nba_drafts_data)
+```
+
+Résumé :
+
+```{r}
+summary(nba_drafts_data)
+```
+
+On enlève les lignes nulles
+
+```{r}
+nba_drafts_data = na.omit(nba_drafts_data)
+dim(nba_drafts_data)
+```
+Indices des joueurs non draftés utilisés plus tard
+
+```{r}
+undrafted_indices <- list()
+
+for (i in 1:length(nba_drafts_data[,1])){
+  if(nba_drafts_data[i,'draft_year'] == "Undrafted"){
+    undrafted_indices <- append(undrafted_indices,i)
+  }
+}
+```
+
+Test d'affichage des données d'un joueur
+
+```{r}
+# Remplacez "John Doe" par le nom du joueur "Undrafted" que vous souhaitez afficher
+undrafted_player_data <- nba_drafts_data[nba_drafts_data$player_name == "Duncan Robinson" & nba_drafts_data$draft_year == "Undrafted", ]
+
+# Afficher les données du joueur "Undrafted"
+print(undrafted_player_data)
+```
+
+Nous allons créer de nouvelles colonnes découlant de celles existant pour avoir plus d'info pertinantes pour nos analyses spécifique de custering
+
+```{r}
+nba_drafts_data_rookie <- nba_drafts_data
+
+# Création d'une nouvelle colonne 'pts_rookie_season' basée sur la correspondance des quatre premiers chiffres de 'draft_year' et 'season'
+nba_drafts_data_rookie$pts_rookie_season <- ifelse(substr(nba_drafts_data_rookie$draft_year, 1, 4) == substr(nba_drafts_data_rookie$season, 1, 4), nba_drafts_data_rookie$pts, NA)
+
+nba_drafts_data_rookie$reb_rookie_season <- ifelse(substr(nba_drafts_data_rookie$draft_year, 1, 4) == substr(nba_drafts_data_rookie$season, 1, 4), nba_drafts_data_rookie$reb, NA)
+
+nba_drafts_data_rookie$ast_rookie_season <- ifelse(substr(nba_drafts_data_rookie$draft_year, 1, 4) == substr(nba_drafts_data_rookie$season, 1, 4), nba_drafts_data_rookie$ast, NA)
+
+nba_drafts_data_rookie$usg_pct_rookie_season <- ifelse(substr(nba_drafts_data_rookie$draft_year, 1, 4) == substr(nba_drafts_data_rookie$season, 1, 4), nba_drafts_data_rookie$usg_pct, NA)
+
+nba_drafts_data_rookie$ts_pct_rookie_season <- ifelse(substr(nba_drafts_data_rookie$draft_year, 1, 4) == substr(nba_drafts_data_rookie$season, 1, 4), nba_drafts_data_rookie$ts_pct, NA)
+
+# Récupérer les indices où 'pts_rookie_season' est modifié
+indices_modifies <- which(!is.na(nba_drafts_data_rookie$pts_rookie_season))
+
+for(ind_rookie_season in indices_modifies){
+  player_name <- nba_drafts_data_rookie$player_name[ind_rookie_season]
+  
+  for(i in 1:length(nba_drafts_data_rookie[,1])){
+    if(nba_drafts_data_rookie$player_name[i] == player_name){
+      nba_drafts_data_rookie$pts_rookie_season[i] <- nba_drafts_data_rookie$pts_rookie_season[ind_rookie_season]
+      nba_drafts_data_rookie$reb_rookie_season[i] <- nba_drafts_data_rookie$reb_rookie_season[ind_rookie_season]
+      nba_drafts_data_rookie$ast_rookie_season[i] <- nba_drafts_data_rookie$ast_rookie_season[ind_rookie_season]
+      nba_drafts_data_rookie$usg_pct_rookie_season[i] <- nba_drafts_data_rookie$usg_pct_rookie_season[ind_rookie_season]
+      nba_drafts_data_rookie$ts_pct_rookie_season[i] <- nba_drafts_data_rookie$ts_pct_rookie_season[ind_rookie_season]
+    }
+  }
+}
+```
+
+```{r}
+# Affichage des premières lignes de la dataframe pour vérification
+head(nba_drafts_data_rookie)
+```
+On vérifie l'implémentation des stats de rookie des joueur draftés à partir de 1996 avec un joueur draftés connu. Ici, Kevin Durant acteul joueur des Phoenix Suns drafté après 1996 en 2007:
+
+```{r}
+player_data <- nba_drafts_data_rookie[nba_drafts_data_rookie$player_name == "Kevin Durant", ]
+
+# Afficher les données du joueur "Drafted"
+print(player_data)
+```
+
+
+Les valeurs Nan des colonnes "XXX_rookie_season" correspondent au fait que la database ne possède pas les information de la saison rookie des joueurs avec ces valeurs Nan (c'est donc le cas pour tout les joueurs ayant effectués leur 1ère année NBA avant 1996 l'année la plus ancienne de la database pour les saisons NBA)
+
+Il y a aussi des valuers Nan pour ces colonnes pour les joueurs dit "Undrafted" car les conditions de créations ne sont pas valides pour ces joueurs nous allons donc pour leur année rookie prendre les années sur la saison la plus anciennes où ils apparaissent (nous sommes conscients que cela pourrait fossé la réalité car les joueurs "Undrafted" apparaissant pour leur plus ancienne saison en 1996 ont peut être effectués leur 1ere saison à une année antérieur). Par rapport à ce cas, nous ne rajouterons pas de valeur aux colonnes rookie_season pour les joueurs "Undrafted apparaissant durant l'année "1996 - 97" et ne seront pas pris en compte pour une analyse des saisons rookies (comme les joueurs ayant des valeurs Nan à ces colonnes).
+
+
+```{r}
+# Liste de la 1ère année des joueurs "Undrafted"
+season_undrafted_player <- list()
+
+# Créer la colonne 'pts_rookie_season' pour les joueurs "Undrafted"
+for (undrafted_index in undrafted_indices) {
+  if(substr(nba_drafts_data_rookie$season[undrafted_index],1,4) != "1996"){
+    player_name <- nba_drafts_data_rookie$player_name[undrafted_index]
+  
+    for (undrafted_season in undrafted_indices){
+      if(player_name == nba_drafts_data_rookie$player_name[undrafted_season]){
+      
+        season_undrafted_player <- append(season_undrafted_player,substr(nba_drafts_data_rookie$season[undrafted_season], 1, 4))
+      }
+    }
+    # Trouver l'année d'apparition la plus ancienne du joueur
+    first_year <- min(as.integer(season_undrafted_player))
+  
+    # Trouver les points du joueur lors de son année d'apparition la plus ancienne
+    pts_rookie_season <- nba_drafts_data_rookie$pts[nba_drafts_data_rookie$player_name == player_name & as.integer(substr(nba_drafts_data_rookie$season, 1, 4)) == first_year]
+  
+    # Assigner les points du joueur lors de son année d'apparition la plus ancienne à 'pts_rookie_season'
+    nba_drafts_data_rookie$pts_rookie_season[undrafted_index] <- pts_rookie_season
+    
+    # Trouver les rebonds du joueur lors de son année d'apparition la plus ancienne
+    reb_rookie_season <- nba_drafts_data_rookie$reb[nba_drafts_data_rookie$player_name == player_name & as.integer(substr(nba_drafts_data_rookie$season, 1, 4)) == first_year]
+  
+    # Assigner les rebonds du joueur lors de son année d'apparition la plus ancienne à 'reb_rookie_season'
+    nba_drafts_data_rookie$reb_rookie_season[undrafted_index] <- reb_rookie_season
+    
+    # Trouver les assists du joueur lors de son année d'apparition la plus ancienne
+    ast_rookie_season <- nba_drafts_data_rookie$ast[nba_drafts_data_rookie$player_name == player_name & as.integer(substr(nba_drafts_data_rookie$season, 1, 4)) == first_year]
+  
+    # Assigner les assists du joueur lors de son année d'apparition la plus ancienne à 'ast_rookie_season'
+    nba_drafts_data_rookie$ast_rookie_season[undrafted_index] <- ast_rookie_season
+    
+    # Trouver les pourcentages d'utilisation du joueur lors de son année d'apparition la plus ancienne
+    usg_pct_rookie_season <- nba_drafts_data_rookie$usg_pct[nba_drafts_data_rookie$player_name == player_name & as.integer(substr(nba_drafts_data_rookie$season, 1, 4)) == first_year]
+  
+    # Assigner les pourcentages d'utilisation du joueur lors de son année d'apparition la plus ancienne à 'usg_pct_rookie_season'
+    nba_drafts_data_rookie$usg_pct_rookie_season[undrafted_index] <- usg_pct_rookie_season
+    
+    # Trouver les pourcentages de tir du joueur lors de son année d'apparition la plus ancienne
+    ts_pct_rookie_season <- nba_drafts_data_rookie$ts_pct[nba_drafts_data_rookie$player_name == player_name & as.integer(substr(nba_drafts_data_rookie$season, 1, 4)) == first_year]
+  
+    # Assigner les pourcentages de tir du joueur lors de son année d'apparition la plus ancienne à 'ts_pct_rookie_season'
+    nba_drafts_data_rookie$ts_pct_rookie_season[undrafted_index] <- ts_pct_rookie_season
+  }
+  
+  season_undrafted_player <- list()
+}
+
+# Afficher les premières lignes de la dataframe pour vérification
+head(nba_drafts_data_rookie)
+```
+
+On vérifie l'implémentation du code et des valeurs des colonnes "..._rookie_season" pour un joueur "Undrafted" après 1996 connu. Ici Duncan Robinson des Miami Heats:
+
+```{r}
+undrafted_player_data <- nba_drafts_data_rookie[nba_drafts_data_rookie$player_name == "Duncan Robinson" & nba_drafts_data_rookie$draft_year == "Undrafted", ]
+
+# Afficher les données du joueur "Undrafted"
+print(undrafted_player_data)
+```
+```{r}
+# Compter le nombre de valeurs NA dans la colonne 'pts_rookie_season'
+nb_na_rookie <- sum(is.na(nba_drafts_data_rookie$pts_rookie_season))
+
+# Afficher le nombre de valeurs NA
+print("Valeurs pts Nan:")
+print(nb_na_rookie)
+
+# Compter le nombre de valeurs NA dans la colonne 'pts_rookie_season'
+nb_na_rookie <- sum(is.na(nba_drafts_data_rookie$reb_rookie_season))
+
+# Afficher le nombre de valeurs NA
+print("Valeurs reb Nan:")
+print(nb_na_rookie)
+
+# Compter le nombre de valeurs NA dans la colonne 'pts_rookie_season'
+nb_na_rookie <- sum(is.na(nba_drafts_data_rookie$ast_rookie_season))
+
+# Afficher le nombre de valeurs NA
+print("Valeurs ast Nan:")
+print(nb_na_rookie)
+
+# Compter le nombre de valeurs NA dans la colonne 'pts_rookie_season'
+nb_na_rookie <- sum(is.na(nba_drafts_data_rookie$usg_pct_rookie_season))
+
+# Afficher le nombre de valeurs NA
+print("Valeurs usg_pct Nan:")
+print(nb_na_rookie)
+
+# Compter le nombre de valeurs NA dans la colonne 'pts_rookie_season'
+nb_na_rookie <- sum(is.na(nba_drafts_data_rookie$ts_pct_rookie_season))
+
+# Afficher le nombre de valeurs NA
+print("Valeurs ts_pct Nan:")
+print(nb_na_rookie)
+```
+
+On regarde le nombre de valeur Nan donc "Non déterminées" pour les saisons rookie des joueurs pour savoir si le prétraitement spécifique (création des colonnes liées à la saison rookie des joueurs) est bien réalisé. 
+
+```{r}
+# Convertir les années de draft et de saison en entiers
+draft_year <- as.integer(subset(nba_drafts_data_rookie$draft_year, nba_drafts_data_rookie$draft_year != "Undrafted"))
+
+# Compter les joueurs "drafted" avant 1997, après 1996 et les joueurs "Undrafted"
+nb_drafted_avant_1996 <- sum(draft_year < 1996)
+nb_drafted_apres_1996 <- sum(draft_year >= 1996)
+nb_undrafted <- sum(nba_drafts_data$draft_year == "Undrafted")
+
+# Afficher les résultats
+print("Nombre de joueurs draftés avant 1996:")
+print(nb_drafted_avant_1996)
+
+print("Nombre de joueurs draftés après 1996:")
+print(nb_drafted_apres_1996)
+
+print("Nombre de joueurs Undrafted:")
+print(nb_undrafted)
+
+# Compter le nombre de joueurs "Undrafted" apparaissant en 1996
+nb_undrafted_1996 <- sum(nba_drafts_data_rookie$draft_year == "Undrafted" & substr(nba_drafts_data_rookie$season, 1, 4) == "1996")
+
+# Afficher le nombre de joueurs "Undrafted" apparaissant en 1996
+print("Nombre de joueurs Undrafted de 1996:")
+print(nb_undrafted_1996)
+```
+On constate que le nombre de lignes des joueur draftés avant 1996 où l'on peut connaître les stats de leur saison rookie correspondent à peu près au nombre de ligne de 'pts_rookie_season' étant Nan. Il ne faut pas oublier aussi que ces le cas pour les joueurs Undrafted apparaissant pour la 1ere fois dans le database durant l'année 1996 qui sont du nombre de 65 sachant qu'ils apparaissent certainement durant les saisons qui suivent. 
+
+Donc les données de la saison rookie des joueurs est plutôt bien implémenté avec les informations disponibles de la database. 
+
+Pour finir l'analyse, il se peut que certains joueurs draftés après 1996 inclus possède des stats d'année rookie vierge car ils peut être tous simplement pas jouer pour cause de blessure (le cas de Chet Holmgren à OKC récemment) ou que les joueurs sélectionnés au 2nd tour de draft ne joue tout simplement pas de la saison en NBA (ils ont potentiellement été envoyé en G-League ligue inférieur) 
+
+On voit que draft_year, draft_round et que draft_number sont traités comme des caractères plutôt que des nombres
+
+```{r}
+nba_drafts_data$draft_year = as.numeric(nba_drafts_data$draft_year)
+nba_drafts_data$draft_round = as.numeric(nba_drafts_data$draft_round)
+nba_drafts_data$draft_number = as.numeric(nba_drafts_data$draft_number)
+str(nba_drafts_data)
+```
+
+
+#1. Etude du style de jeu avec les caractéristiques du joueurs
+
+## Agrégation : Est ce qu-il faut aggréger les données avant avec un aggregate par joueur ?
+
+```{r}
+# On garde que les colonnes numériques mais on prend aussi les noms des joueurs
+names_numes = names(which(sapply(nba_drafts_data, is.numeric)))
+nba_drafts_data_study_1 = nba_drafts_data[,names_numes]
+head(nba_drafts_data_study_1)
+```
+
+```{r}
+nba_drafts_data_study_1 = aggregate(nba_drafts_data_study_1, by=list(nba_drafts_data$player_name), FUN=mean)
+head(nba_drafts_data_study_1)
+dim(nba_drafts_data_study_1)
+```
+
+##ACP Pour une étude d'ACP, on va d'abord chercher à normaliser les données pour éviter que les grandes variances influencent les données. On va aussi prendre seulement les données qui nous intéressent
+
+```{r}
+nba_drafts_data_study_1 = nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct")]
+head(nba_drafts_data_study_1)
+```
+
+Nous effectuons une ACP
+
+```{r}
+library(FactoMineR)
+ACP = PCA(nba_drafts_data_study_1)
+plot.PCA(ACP)
+```
+
+Nous voyons que oreb_pct (contribution des rebonds offensives) est mal interprétée donc nous allons l'enlever.
+
+```{r}
+ACP = PCA(nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct")])
+plot.PCA(ACP)
+```
+
+On regarde les contributions des axes
+
+```{r}
+barplot(cumsum(ACP$eig[,2]))
+```
+
+3 dimensions servent déjà à expliquer 80% des données.
+
+Regardons le cercle de corrélation :
+
+On voit que le premier axe étudie les caractéristiques des joueurs : plus les individus ont des grandes caractéristiques, plus ils sont placés vers la droite dans le graphe de l'ACP. Ici, on voit particulièrement que la taille des joueurs NBA corrélère positivement avec leur poids ce qui semble assez logique pour des sportifs.
+
+Le deuxième axe semble être parfaitement corrélée aux nombres de points que marque
