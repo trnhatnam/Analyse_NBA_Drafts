@@ -35,7 +35,7 @@ Nous effectuons une ACP
 ```{r}
 library(FactoMineR)
 ACP = PCA(nba_drafts_data_study_1)
-plot.PCA(ACP)
+plot.PCA(ACP, choix="varcor", select="cos2 0.6")
 ```
 
 Nous voyons que oreb_pct (contribution des rebonds offensives) est mal interprétée donc nous allons l'enlever.
