@@ -4,36 +4,11 @@ author: "TRINH Nhat-nam, SOBCZYK Gabriel - MAIN4"
 date: "2024-03-01"
 output: html_document
 ---
-# 0. Prétraitement des données
-```{r}
-nba_drafts_data = read.csv2("all_seasons.csv", sep=",", dec=".", header=TRUE, row.names = 1)
-head(nba_drafts_data)
-str(nba_drafts_data)
-dim(nba_drafts_data)
-```
-
-Résumé : 
-```{r}
-summary(nba_drafts_data)
-```
-On enlève les lignes nulles
-```{r}
-nba_drafts_data = na.omit(nba_drafts_data)
-dim(nba_drafts_data)
-```
-
-
-On voit que draft_year, draft_round et que draft_number sont traités comme des caractères plutôt que des nombres
-```{r}
-nba_drafts_data$draft_year = as.numeric(nba_drafts_data$draft_year)
-nba_drafts_data$draft_round = as.numeric(nba_drafts_data$draft_round)
-nba_drafts_data$draft_number = as.numeric(nba_drafts_data$draft_number)
-str(nba_drafts_data)
-```
-
 #1. Etude du style de jeu avec les caractéristiques du joueurs
 
 ## Agrégation : Est ce qu-il faut aggréger les données avant avec un aggregate par joueur ?
+
+Regardons les performances sur toutes les saisons
 
 ```{r}
 # On garde que les colonnes numériques mais on prend aussi les noms des joueurs
@@ -48,19 +23,21 @@ head(nba_drafts_data_study_1)
 dim(nba_drafts_data_study_1)
 ```
 
+## ACP 
 
-##ACP
-Pour une étude d'ACP, on va d'abord chercher à normaliser les données pour éviter que les grandes variances influencent les données. On va aussi prendre seulement les données qui nous intéressent
 ```{r}
 nba_drafts_data_study_1 = nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct")]
 head(nba_drafts_data_study_1)
 ```
+
 Nous effectuons une ACP
+
 ```{r}
 library(FactoMineR)
 ACP = PCA(nba_drafts_data_study_1)
 plot.PCA(ACP)
 ```
+
 Nous voyons que oreb_pct (contribution des rebonds offensives) est mal interprétée donc nous allons l'enlever.
 
 ```{r}
@@ -68,15 +45,40 @@ ACP = PCA(nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "re
 plot.PCA(ACP)
 ```
 
-On regarde les contributions des axes
+On regarde les contributions cumulées des axes
+
 ```{r}
 barplot(cumsum(ACP$eig[,2]))
 ```
 
-3 dimensions servent déjà à expliquer 80% des données.
+2 dimensions servent déjà à expliquer 80% des données.
 
-Regardons le cercle de corrélation : 
+Regardons le cercle de corrélation :
 
-On voit que le premier axe étudie les caractéristiques des joueurs : plus les individus ont des grandes caractéristiques, plus ils sont placés vers la droite dans le graphe de l'ACP. Ici, on voit particulièrement que la taille des joueurs NBA corrélère positivement avec leur poids ce qui semble assez logique pour des sportifs.
+On voit que le premier axe correspond aux caractéristiques des joueurs : plus les individus ont des grandes caractéristiques, plus ils sont placés vers la droite dans le graphe de l'ACP. Ici, on voit particulièrement que la taille des joueurs NBA corrélère positivement avec leur poids ce qui semble assez logique pour des sportifs.
 
-Le deuxième axe semble être parfaitement corrélée aux nombres de points que marque
+Le deuxième axe semble correspond aux performances du joueurs : on voit que les points et le nombre d'assistes et de rebond sont corrélés à cet axe.
+
+Par conséquent, chaque cadre semble correspondre à un profil de joueur : les individus en haut à droite semble correspondre aux joueurs qui ont de très bonnes performances et caractéristiques. Les individus en bas à gauche semble correspondre aux joueurs qui ont de moins bonnes performances et caractéristiques.
+
+
+## ACP avec étude de draft
+
+On va étudier la saison 1998-99
+```{r}
+nba_drafts_data_study_2 = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
+head(nba_drafts_data)
+```
+On remplace les NA par des 0.
+On classe ensuite les groupes de drafts : en effet il y a environ 50 rounds de drafts, essayons de les réduire à 5 groupes pour la perception de groupes.
+
+```{r}
+ nba_drafts_data_study_2$draft_round[which(is.na(nba_drafts_data_study_2$draft_round))] = -1
+```
+
+On considère le round de draft comme une variable supplémentaire. On veut en effet voir comment sont regroupés ce qui sont draftés et ce qui ne le sont pas.
+```{r}
+ACP_2 = PCA(nba_drafts_data_study_2[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct", "draft_round")], quali.sup=7)
+plot.PCA(ACP_2, select = "contrib 50")
+```
+On voit que les joueurs draftés en premier 1 sont bien placés dans le cadrant en haut. Ce sont les joueurs qui ont des bonnes performances.
