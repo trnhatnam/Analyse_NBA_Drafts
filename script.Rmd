@@ -4,7 +4,31 @@ author: "TRINH Nhat-nam, SOBCZYK Gabriel - MAIN4"
 date: "2024-03-01"
 output: html_document
 ---
+
+# Prétrairement
+
+```{r}
+nba_drafts_data = read.csv2("all_seasons.csv", sep=",", dec=".", header=TRUE, row.names = 1)
+head(nba_drafts_data)
+str(nba_drafts_data)
+dim(nba_drafts_data)
+```
+
+Résumé :
+
+```{r}
+summary(nba_drafts_data)
+```
+
+On enlève les lignes nulles
+
+```{r}
+nba_drafts_data = na.omit(nba_drafts_data)
+dim(nba_drafts_data)
 #1. Etude du style de jeu avec les caractéristiques du joueurs
+
+````
+
 
 ## Agrégation : Est ce qu-il faut aggréger les données avant avec un aggregate par joueur ?
 
@@ -23,10 +47,10 @@ head(nba_drafts_data_study_1)
 dim(nba_drafts_data_study_1)
 ```
 
-## ACP 
+# 1. ACP 
 
 ```{r}
-nba_drafts_data_study_1 = nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct")]
+nba_drafts_data_study_1 = nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct", "ts_pct")]
 head(nba_drafts_data_study_1)
 ```
 
@@ -38,7 +62,7 @@ ACP = PCA(nba_drafts_data_study_1)
 plot.PCA(ACP, choix="varcor", select="cos2 0.6")
 ```
 
-Nous voyons que oreb_pct (contribution des rebonds offensives) est mal interprétée donc nous allons l'enlever.
+Nous voyons que oreb_pct (contribution des rebonds offensives) et ts_pct (pourcentage de panier mis) sont mal interprétées à cause des mesures du cos2 de la projection qui sont faibles donc nous allons l'enlever.
 
 ```{r}
 ACP = PCA(nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct")])
@@ -79,6 +103,64 @@ On classe ensuite les groupes de drafts : en effet il y a environ 50 rounds de d
 On considère le round de draft comme une variable supplémentaire. On veut en effet voir comment sont regroupés ce qui sont draftés et ce qui ne le sont pas.
 ```{r}
 ACP_2 = PCA(nba_drafts_data_study_2[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct", "draft_round")], quali.sup=7)
-plot.PCA(ACP_2, select = "contrib 50")
+plot.PCA(ACP_2, select = "contrib 25")
 ```
 On voit que les joueurs draftés en premier 1 sont bien placés dans le cadrant en haut. Ce sont les joueurs qui ont des bonnes performances.
+
+On remarque de plus que les joueurs avec des stats bien définies sont contributeurs dans l'établissement des axes. Les joueurs "moyens" ne le sont pas.
+
+
+
+#2. Clustering sur les styles de jeu
+
+Ici, on va chercher à étudier s'il y a différents profils de joueurs : quels sont les styles de jeu présents ?
+
+On va d'abord faire une classification CAH et estimer le nombre de classes optimale qui minimise la distance intra classe.
+
+```{r}
+seasons_data = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
+                                         
+seasons_data = all_seasons_data[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct","oreb_pct", "ts_pct")]
+
+distance = dist(seasons_data)
+hc <- hclust(distance, method = "ward.D2")
+plot(hc)
+rect.hclust(hc, k = 3)
+```
+
+
+On voit qu'on peut séparer en environ 3 classes d'invidividu; Il serait intéressant de voir quels sont les caractéristiques des joueurs dans chacun de ces classes.
+```{r}
+player_grps = cutree(hc, k=3)
+stats_grps = aggregate(seasons_data, by=list(player_grps), FUN=mean)
+stats_grps
+dim(stats_grps)
+```
+
+Utilisons l'algorithme de kmeans avec 3 centres et 1000 initialisations
+
+```{r}
+kmeans.result = kmeans(seasons_data, centers = 3, nstart=1000)
+kmeans.result
+```
+
+
+Faisons une ACP pour voir où sont placés ces joueurs. Comme on a fait une ACP un peu différente par rapport aux précédents, regardons si la contribution des axes a changés.
+
+```{r}
+seasons_data_with_clusters = cbind.data.frame(seasons_data, cluster = factor(kmeans.result$cluster))
+dim(seasons_data_with_clusters)
+ACP_cluster = PCA(seasons_data_with_clusters, quali.sup=9)
+plot.PCA(ACP_cluster, choix="ind", select="contrib 50")
+plot.PCA(ACP_cluster, choix="varcor", select="cos2 0.6")
+
+```
+
+(les clusters à expliquer je pense)
+
+Contribution des axes : on voit que 2 axes vont expliquer environ 70% des données. C'est une diminution par rapport à l'ACP précédent car on a gardé des variables mal interprétées (oreb_pct et ts_pct)
+
+```{r}
+barplot(cumsum(ACP_cluster$eig[,2]))
+```
+
