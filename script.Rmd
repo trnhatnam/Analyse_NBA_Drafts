@@ -93,8 +93,8 @@ On va étudier la saison 1998-99
 nba_drafts_data_study_2 = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
 head(nba_drafts_data)
 ```
-On remplace les NA par des 0.
-On classe ensuite les groupes de drafts : en effet il y a environ 50 rounds de drafts, essayons de les réduire à 5 groupes pour la perception de groupes.
+
+
 
 ```{r}
  nba_drafts_data_study_2$draft_round[which(is.na(nba_drafts_data_study_2$draft_round))] = -1
@@ -120,27 +120,38 @@ On va d'abord faire une classification CAH et estimer le nombre de classes optim
 ```{r}
 seasons_data = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
                                          
-seasons_data = all_seasons_data[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct","oreb_pct", "ts_pct")]
+seasons_data = seasons_data[c("player_height", "player_weight", "pts", "reb", "ast")]
 
 distance = dist(seasons_data)
 hc <- hclust(distance, method = "ward.D2")
 plot(hc)
-rect.hclust(hc, k = 3)
+rect.hclust(hc, k = 4, border="blue")
 ```
 
 
 On voit qu'on peut séparer en environ 3 classes d'invidividu; Il serait intéressant de voir quels sont les caractéristiques des joueurs dans chacun de ces classes.
 ```{r}
-player_grps = cutree(hc, k=3)
+player_grps = cutree(hc, k=4)
 stats_grps = aggregate(seasons_data, by=list(player_grps), FUN=mean)
 stats_grps
 dim(stats_grps)
 ```
 
-Utilisons l'algorithme de kmeans avec 3 centres et 1000 initialisations
+
+On peut voir que les groupes 1 & 2 ont des grands gabaris vs les groupes 3 & 4.
+En terme de stat :
+- Le groupe 1 n'a pas vraiment de particularité
+- Le groupe 2 marque le plus de points en moyenne et récupère le plus de rebonds par match.
+- Le groupe 3 semble le plus all-rounder
+- Le groupe 4 ont plus un style support.
+
+
+
+
+Utilisons l'algorithme de kmeans avec 4 centres et 1000 initialisations
 
 ```{r}
-kmeans.result = kmeans(seasons_data, centers = 3, nstart=1000)
+kmeans.result = kmeans(seasons_data, centers = 4, nstart=1000)
 kmeans.result
 ```
 
@@ -150,15 +161,12 @@ Faisons une ACP pour voir où sont placés ces joueurs. Comme on a fait une ACP 
 ```{r}
 seasons_data_with_clusters = cbind.data.frame(seasons_data, cluster = factor(kmeans.result$cluster))
 dim(seasons_data_with_clusters)
-ACP_cluster = PCA(seasons_data_with_clusters, quali.sup=9)
+ACP_cluster = PCA(seasons_data_with_clusters, quali.sup=6)
 plot.PCA(ACP_cluster, choix="ind", select="contrib 50")
 plot.PCA(ACP_cluster, choix="varcor", select="cos2 0.6")
 
 ```
-
-(les clusters à expliquer je pense)
-
-Contribution des axes : on voit que 2 axes vont expliquer environ 70% des données. C'est une diminution par rapport à l'ACP précédent car on a gardé des variables mal interprétées (oreb_pct et ts_pct)
+L'axe 1 pourrait bien expliquer les clusters que nous avons obtenus. L'axe 2 pourrait expliquer la séparation du cluster 3 aux autres.
 
 ```{r}
 barplot(cumsum(ACP_cluster$eig[,2]))
