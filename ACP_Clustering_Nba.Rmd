@@ -5,7 +5,7 @@ date: "2024-03-01"
 output: html_document
 ---
 
-# Prétrairement
+# Prétrairement des données
 
 ```{r}
 nba_drafts_data = read.csv2("all_seasons.csv", sep=",", dec=".", header=TRUE, row.names = 1)
@@ -20,19 +20,17 @@ Résumé :
 summary(nba_drafts_data)
 ```
 
-On enlève les lignes nulles
+On enlève les lignes qui contiennent des données indéfinies.
 
 ```{r}
 nba_drafts_data = na.omit(nba_drafts_data)
 dim(nba_drafts_data)
-#1. Etude du style de jeu avec les caractéristiques du joueurs
 
 ````
 
+## Agrégation pour l'ACP
 
-## Agrégation : Est ce qu-il faut aggréger les données avant avec un aggregate par joueur ?
-
-Regardons les performances sur toutes les saisons
+Nous allons effectuer une ACP sur nos données afin d'étudier dans un premier temps la corrélation entre les variables. La question qu'on se pose principalement est : Est-ce que certaines caractéristiques (taille, poids) vont favoriser un style de jeu en particulier (plus d'assites, de rebonds ?).
 
 ```{r}
 # On garde que les colonnes numériques mais on prend aussi les noms des joueurs
@@ -40,7 +38,7 @@ names_numes = names(which(sapply(nba_drafts_data, is.numeric)))
 nba_drafts_data_study_1 = nba_drafts_data[,names_numes]
 head(nba_drafts_data_study_1)
 ```
-
+On fait une aggrégation en faisant la moyenne des valeurs numériques en rassemblant.
 ```{r}
 nba_drafts_data_study_1 = aggregate(nba_drafts_data_study_1, by=list(nba_drafts_data$player_name), FUN=mean)
 head(nba_drafts_data_study_1)
@@ -49,12 +47,14 @@ dim(nba_drafts_data_study_1)
 
 # 1. ACP 
 
+Nous prenons les variables qui sont liés à la performance et aux caractéristiques du joueur.
+
 ```{r}
 nba_drafts_data_study_1 = nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct", "ts_pct")]
 head(nba_drafts_data_study_1)
 ```
 
-Nous effectuons une ACP
+Nous effectuons une ACP.
 
 ```{r}
 library(FactoMineR)
@@ -69,7 +69,7 @@ ACP = PCA(nba_drafts_data_study_1[c("player_height", "player_weight", "pts", "re
 plot.PCA(ACP)
 ```
 
-On regarde les contributions cumulées des axes
+On regarde les contributions cumulées des axes.
 
 ```{r}
 barplot(cumsum(ACP$eig[,2]))
@@ -88,27 +88,25 @@ Par conséquent, chaque cadre semble correspondre à un profil de joueur : les i
 
 ## ACP avec étude de draft
 
-On va étudier la saison 1998-99
+Ici, on cherche à savoir si la performance du joueur justifie le numéro de draft. La période de draft est effectué tous les ans donc nous allons seulement nous restreindre à une saison en particulière. En toute généralité, les joueurs draftés en premier sont généralement des joueurs prometteurs. Cette étude va permettre de savoir si les joueurs "méritent" leur numéro de draft.
+
+On va étudier la saison 1998-99.
 ```{r}
 nba_drafts_data_study_2 = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
 head(nba_drafts_data)
 ```
 
-
-
+Il y a des joueurs qui peuvent être non draftés dont leurs numéros de drafts ne sont pas indiqués (NA) donc on va mettre -1 à la place.
 ```{r}
  nba_drafts_data_study_2$draft_round[which(is.na(nba_drafts_data_study_2$draft_round))] = -1
 ```
 
-On considère le round de draft comme une variable supplémentaire. On veut en effet voir comment sont regroupés ce qui sont draftés et ce qui ne le sont pas.
+On considère le round de draft comme une variable supplémentaire pour voir le centre de gravité des groupes de drafts. On veut en effet voir comment sont regroupés ce qui sont draftés et ce qui ne le sont pas.
 ```{r}
 ACP_2 = PCA(nba_drafts_data_study_2[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct", "draft_round")], quali.sup=7)
 plot.PCA(ACP_2, select = "contrib 25")
 ```
 On voit que les joueurs draftés en premier 1 sont bien placés dans le cadrant en haut. Ce sont les joueurs qui ont des bonnes performances.
-
-On remarque de plus que les joueurs avec des stats bien définies sont contributeurs dans l'établissement des axes. Les joueurs "moyens" ne le sont pas.
-
 
 
 #2. Clustering sur les styles de jeu
@@ -120,7 +118,7 @@ On va d'abord faire une classification CAH et estimer le nombre de classes optim
 ```{r}
 seasons_data = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
                                          
-seasons_data = seasons_data[c("player_height", "player_weight", "pts", "reb", "ast")]
+seasons_data = seasons_data[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct", "ts_pct")]
 
 distance = dist(seasons_data)
 hc <- hclust(distance, method = "ward.D2")
@@ -129,7 +127,7 @@ rect.hclust(hc, k = 4, border="blue")
 ```
 
 
-On voit qu'on peut séparer en environ 3 classes d'invidividu; Il serait intéressant de voir quels sont les caractéristiques des joueurs dans chacun de ces classes.
+On voit qu'on peut séparer en environ 4 classes d'invidividu; Il serait intéressant de voir quels sont les caractéristiques des joueurs dans chacun de ces classes.
 ```{r}
 player_grps = cutree(hc, k=4)
 stats_grps = aggregate(seasons_data, by=list(player_grps), FUN=mean)
@@ -161,14 +159,15 @@ Faisons une ACP pour voir où sont placés ces joueurs. Comme on a fait une ACP 
 ```{r}
 seasons_data_with_clusters = cbind.data.frame(seasons_data, cluster = factor(kmeans.result$cluster))
 dim(seasons_data_with_clusters)
-ACP_cluster = PCA(seasons_data_with_clusters, quali.sup=6)
+ACP_cluster = PCA(seasons_data_with_clusters, quali.sup=9)
 plot.PCA(ACP_cluster, choix="ind", select="contrib 50")
 plot.PCA(ACP_cluster, choix="varcor", select="cos2 0.6")
 
 ```
-L'axe 1 pourrait bien expliquer les clusters que nous avons obtenus. L'axe 2 pourrait expliquer la séparation du cluster 3 aux autres.
+On voit que les clusters 1/3 et les clusters 2/4 sont séparés par le deuxième axe. Rappelons nous que l'axe 1 sépare les joueurs ayant des gros gabaris et petits gabaris.
+
+Regardons la contribution des axes :
 
 ```{r}
 barplot(cumsum(ACP_cluster$eig[,2]))
 ```
-
