@@ -85,6 +85,18 @@ Le deuxième axe semble correspond aux performances du joueurs : on voit que les
 
 Par conséquent, chaque cadre semble correspondre à un profil de joueur : les individus en haut à droite semble correspondre aux joueurs qui ont de très bonnes performances et caractéristiques. Les individus en bas à gauche semble correspondre aux joueurs qui ont de moins bonnes performances et caractéristiques.
 
+Regardons les 50 individus les plus contributeurs dans l'ACP :
+
+```{r}
+plot(ACP, choix="ind", select="contrib 10")
+```
+On remarque que les joueurs les plus contributeurs sont situés dans les extrêmes. Essayons de voir quels sont ces joueurs.
+
+```{r}
+nba_drafts_data_study_1[c(404,1535, 2102, 1377),]
+```
+
+
 
 ## ACP avec étude de draft
 
@@ -106,68 +118,160 @@ On considère le round de draft comme une variable supplémentaire pour voir le 
 ACP_2 = PCA(nba_drafts_data_study_2[c("player_height", "player_weight", "pts", "reb", "ast","dreb_pct", "draft_round")], quali.sup=7)
 plot.PCA(ACP_2, select = "contrib 25")
 ```
-On voit que les joueurs draftés en premier 1 sont bien placés dans le cadrant en haut. Ce sont les joueurs qui ont des bonnes performances.
+On peut faire un coloriage pour voir exactement où sont les groupes de draft dans le graphique des individus.
+
+```{r}
+plot(ACP_2, choix="ind", habillage=7)
+```
+On voit que la plupart des joueurs draftés au 2ème round ont eu des mauvaises performances tandis qu'on peut trouver toute sorte de profil pour les joueurs draftés au premier round.
 
 
 #2. Clustering sur les styles de jeu
 
+## CAH
 Ici, on va chercher à étudier s'il y a différents profils de joueurs : quels sont les styles de jeu présents ?
 
 On va d'abord faire une classification CAH et estimer le nombre de classes optimale qui minimise la distance intra classe.
 
 ```{r}
-seasons_data = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
-                                         
-seasons_data = seasons_data[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct", "ts_pct")]
+# Extraction des données numériques
+season_data = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
+season_data = season_data[c("player_height", "player_weight", "pts", "reb", "ast", "oreb_pct", "dreb_pct", "ts_pct")]
 
-distance = dist(seasons_data)
+# CAH
+distance = dist(season_data)
 hc <- hclust(distance, method = "ward.D2")
 plot(hc)
 rect.hclust(hc, k = 4, border="blue")
 ```
 
 
-On voit qu'on peut séparer en environ 4 classes d'invidividu; Il serait intéressant de voir quels sont les caractéristiques des joueurs dans chacun de ces classes.
+On voit qu'on peut séparer en environ 4 classes d'invidividu.
 ```{r}
-player_grps = cutree(hc, k=4)
-stats_grps = aggregate(seasons_data, by=list(player_grps), FUN=mean)
-stats_grps
-dim(stats_grps)
+player_grps = cutree(hc, k=4) 
+season_data_with_cah = cbind.data.frame(season_data, cluster = factor(player_grps))
+dim(season_data_with_cah)
+ACP_cah = PCA(season_data_with_cah, quali.sup=9)
+plot(ACP_cah, choix="ind", habillage=9)
+```
+Ici, on voit que le cluster 1 définit déjà un groupe de joueurs avec des performances et des caractéristiques particuliers. Etudions les variables de l'ACP. On pourrait ici garder 2 axes comme l'ajout d'un 3ème axe ne va pas améliorer grandement l'explication des données.
+
+```{r}
+barplot(cumsum(ACP_cah$eig[,2]))
 ```
 
 
-On peut voir que les groupes 1 & 2 ont des grands gabaris vs les groupes 3 & 4.
-En terme de stat :
-- Le groupe 1 n'a pas vraiment de particularité
-- Le groupe 2 marque le plus de points en moyenne et récupère le plus de rebonds par match.
-- Le groupe 3 semble le plus all-rounder
-- Le groupe 4 ont plus un style support.
 
-
-
-
-Utilisons l'algorithme de kmeans avec 4 centres et 1000 initialisations
+Regardons les caractéristiques des individus dans chaque cluster :
 
 ```{r}
-kmeans.result = kmeans(seasons_data, centers = 4, nstart=1000)
-kmeans.result
+stats_grps_cah = aggregate(season_data, by=list(player_grps), FUN=mean)
+dim(stats_grps_cah)
+stats_grps_cah
 ```
 
 
-Faisons une ACP pour voir où sont placés ces joueurs. Comme on a fait une ACP un peu différente par rapport aux précédents, regardons si la contribution des axes a changés.
+
+
+
+## K-means
+
+Comparons avec l'algorithme de kmeans avec 4 centres et 1000 initialisations. 
 
 ```{r}
-seasons_data_with_clusters = cbind.data.frame(seasons_data, cluster = factor(kmeans.result$cluster))
-dim(seasons_data_with_clusters)
-ACP_cluster = PCA(seasons_data_with_clusters, quali.sup=9)
-plot.PCA(ACP_cluster, choix="ind", select="contrib 50")
-plot.PCA(ACP_cluster, choix="varcor", select="cos2 0.6")
-
+kmeans.result = kmeans(season_data, centers = 4, nstart=1000)
+table(kmeans.result$cluster, player_grps)
 ```
-On voit que les clusters 1/3 et les clusters 2/4 sont séparés par le deuxième axe. Rappelons nous que l'axe 1 sépare les joueurs ayant des gros gabaris et petits gabaris.
+On voit que ces 2 modèles des résultats très différents. Essayons de voir comment ces modèles séparent les joueurs.
 
-Regardons la contribution des axes :
 
 ```{r}
-barplot(cumsum(ACP_cluster$eig[,2]))
+season_data_with_kmeans = cbind.data.frame(season_data, cluster = factor(kmeans.result$cluster))
+dim(season_data_with_kmeans)
+ACP_kmeans = PCA(season_data_with_kmeans, quali.sup=9)
+```
+
+Il faudrait ici garder 3 axes pour expliquer au moins 80% des données. 2 axes pourraient suffir avoir 70% des données.
+
+Voici la répartition des clusters dans le graphe des individus :
+```{r}
+plot(ACP_kmeans, choix="ind", habillage=9)
+```
+On peut remarquer plusieurs choses :
+- on voit que les clusters 1/3 et les clusters 2/4 sont séparés par le deuxième axe. Rappelons nous que l'axe 1 sépare les joueurs selon leur poids et
+- les performances des joueurs ne semblent pas être un critère pour séparer les individus : on peut retrouver différents profils de joueurs dans l'ACP.
+
+
+
+Même chose ici, on peut essayer de regarder la contribution des axes
+```{r}
+barplot(cumsum(ACP_kmeans$eig[,2]))
+```
+
+
+
+
+
+# Ajout de clusters supplémentaires 
+
+Essayons d'ajouter des clusters pour voir si on peut voir des séparations au niveau de la performance des joueurs.
+
+## CAH
+```{r}
+plot(hc)
+rect.hclust(hc, k = 6, border="blue")
+```
+On refait une ACP avec un coloriage selon les clusters.
+
+```{r}
+player_grps2 = cutree(hc, k=6)
+season_data_with_cah2 = cbind.data.frame(season_data, cluster = factor(player_grps2))
+dim(season_data_with_cah2)
+ACP_cah = PCA(season_data_with_cah2, quali.sup=9)
+plot(ACP_cah, choix="ind", habillage=9)
+```
+
+Les cluters 1,2,5 et 6 semblent prendre en compte maintenant les performances des joueurs. On peut par contre trouver plusieurs profils dans les clusters 2 et 3 en terme de performances.
+
+
+## K-means
+
+
+```{r}
+kmeans.result2 = kmeans(season_data, centers = 6, nstart=1000)
+table(kmeans.result2$cluster, player_grps2)
+```
+On voit là encore de très grandes différences en terme de classification ce qui est normal car ces 2 modèles peuvent classifier différement les clusters.
+
+```{r}
+season_data_with_kmeans2 = cbind.data.frame(season_data, cluster = factor(kmeans.result2$cluster))
+dim(season_data_with_kmeans2)
+ACP_kmeans = PCA(season_data_with_kmeans2, quali.sup=9)
+plot(ACP_kmeans, habillage=9, choix="ind")
+```
+On peut voir que les clusters sont répartis de la même manière que le CAH. Les clusters ne sont pas pris dans le même ordre.
+
+Dans ce graphe, nous pouvons voir que le cluster 6 regroupe les joueurs ayant des bonnes performances et ayant des bonnes caractéristiques. Nous pouvons de cette manière interpréter les autres groupes.
+
+
+# Retrait des colonnes pourcentages
+
+Test pour voir si le retrait des  colonnes pourcentages pourraient améliorer la classification
+```{r}
+# # Données
+# season_data = nba_drafts_data[which(nba_drafts_data$season == "1998-99"),]
+# season_data = season_data[c("player_height", "player_weight", "pts", "reb", "ast")]
+# 
+# # CAH
+# distance = dist(season_data)
+# hc <- hclust(distance, method = "ward.D2")
+# plot(hc)
+# rect.hclust(hc, k = 6, border="blue")
+# player_grps = cutree(hc, k=6)
+# 
+# # ACP
+# season_data_with_cah = cbind.data.frame(season_data, cluster = factor(player_grps))
+# dim(season_data_with_cah)
+# ACP_cah = PCA(season_data_with_cah, quali.sup=6)
+# plot(ACP_cah, habillage=6, choix="ind")
 ```
