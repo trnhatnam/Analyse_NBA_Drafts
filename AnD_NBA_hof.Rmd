@@ -1,5 +1,6 @@
 ---
-title: "NBA_hof_supervised"
+title: "Projet Analyse de Données - Hall of Fame"
+author: "TRINH Nhat-nam, SOBCZYK Gabriel - MAIN4"
 output: html_document
 date: "2024-05-03"
 ---
@@ -17,7 +18,7 @@ dim(nba_hof_data)
 Par rapport à l'étude précédent pour les données de saison rookie rajoutées pour le clustering non supervisé, nous savons que la database possède des valeurs 'Nan' pour les colonnes '..._rookie_season'. On verifie également que d'autres colonnes ne possèdent pas de valeurs 'Nan' pour déterminer si on les supprime ou non. Les colonnes liées à l'année nba sont également présentent en plusieurs exemplaires ('season_x','season_year','year','season'). De plus, on peut affirmer pertinemment que la colonne 'oreb_pct' aura un impact négligeable sur la suite étant donné que les rebonds offensifs sont très faibles pour tous les joueurs et n'ont pas d'impact sur le fil de la carrière.
 
 ```{r}
-# Compter les valeurs NaN pour chaque colonne dans la base de données data_hof_nba
+# Compter les valeurs NaN pour chaque colonne dans la base de données nba_hof_data
 nombre_nan_par_colonne <- colSums(is.na(nba_hof_data))
 
 # Afficher le nombre de valeurs NaN pour chaque colonne
@@ -28,8 +29,8 @@ print(nombre_nan_par_colonne)
 On va supprimer des données pas très pertinentes et que tous les joueurs ne possèdent pas vraiment comme les données des saisons rookie de tous les joueurs même si elles auraient pu donner une idée de si un rookie/joueur récent à la possibilité d'intégré le hall of fame.
 
 ```{r}
-# Supprimer les colonnes de la base de données data_hof_nba
-nba_hof_data <- subset(nba_hof_data, select = -c(pts_rookie_season, reb_rookie_season, ast_rookie_season,usg_pct_rookie_season, ts_pct_rookie_season, season_x,season,age,college,country,draft_year,draft_round,draft_number,oreb_pct))
+# Supprimer les colonnes de la base de données nba_hof_data
+nba_hof_data <- subset(nba_hof_data, select = -c(pts_rookie_season, reb_rookie_season, ast_rookie_season,usg_pct_rookie_season, ts_pct_rookie_season, season_x,season,age,oreb_pct))
 
 head(nba_hof_data)
 ```
@@ -100,7 +101,7 @@ data_recent_player <- subset(nba_hof_data, player_name %in% joueurs_superieurs_2
 
 ```
 
-Vérifions vite fait
+Vérifions la répartition de nos 2 nouvelles databases.
 
 ```{r}
 head(data_old_player)
@@ -133,27 +134,31 @@ Comme vérifier antérieurement les joueurs récemment inaugurés au Hall of Fam
 
 Pour la classification supervisé on convertit les colonne str de manière judicieuse, (1 pour les joueurs ayant été champions nba l'année indiqué, pareil pour finalist et mvp_finals)
 
+Par rapport à certaines colonnes comme 'college' ou 'country', nous avons décidé de la gérer de sorte à ce qu'elle puisse être utilisable au sein de la classification. Pour rendre cela possible, il fallait réduire le nombre de variables différentes possibles au sein de ces colonnes. Par exemple, pour 'country', il y a beaucoup de pays différents possibles. Pour réduire les valeurs possibles, on a réduit cette colonne à 2 valeurs ('USA' et 'World', le rising Star est basé sur ce thème et comme la NBA est la ligue américaine le pays dominant est 'USA'). Pour les colonnes 'draft_year' et 'draft_number', celles-ci restent incompatibles lors de la mise en place de notre classification. Pour ce qui est de la colonne 'college', il y a aussi beaucoup de valeurs à gerer, donc on l'abandonne car incompatible avec la classificaton.
+
 ```{r}
 # Pour data_old_player
 data_old_player$nba_champion <- ifelse(data_old_player$team_abbreviation == data_old_player$nba_champion, 1, 0)
 data_old_player$finalist <- ifelse(data_old_player$team_abbreviation == data_old_player$finalist, 1, 0)
 data_old_player$mvp_finals <- ifelse(data_old_player$player_name == data_old_player$mvp_finals, 1, 0)
+data_old_player$country <- ifelse(data_old_player$country == "USA", "USA", "World")
 
 # Pour data_recent_player
 data_recent_player$nba_champion <- ifelse(data_recent_player$team_abbreviation == data_recent_player$nba_champion, 1, 0)
 data_recent_player$finalist <- ifelse(data_recent_player$team_abbreviation == data_recent_player$finalist, 1, 0)
 data_recent_player$mvp_finals <- ifelse(data_recent_player$player_name == data_recent_player$mvp_finals, 1, 0)
+data_recent_player$country <- ifelse(data_recent_player$country == "USA", "USA", "World")
 ```
 
 On convertit en facteur les colonnes college et country pour pas de problème lors de la fusion selon les joueurs
 
 ```{r}
 # Convertir les colonnes contenant les noms de pays et de collèges en facteurs s'ils sont identiques pour chaque joueur
-# data_old_player$college <- as.factor(data_old_player$college)
-# data_old_player$country <- as.factor(data_old_player$country)
+data_old_player$college <- as.factor(data_old_player$college)
+data_old_player$country <- as.factor(data_old_player$country)
 
-# data_recent_player$college <- as.factor(data_recent_player$college)
-# data_recent_player$country <- as.factor(data_recent_player$country)
+data_recent_player$college <- as.factor(data_recent_player$college)
+data_recent_player$country <- as.factor(data_recent_player$country)
 
 ```
 
@@ -169,6 +174,8 @@ data_old_player_career <- data_old_player %>%
   summarise(
     player_height = mean(player_height),
     player_weight = mean(player_weight),
+    country = country,
+    draft_round = draft_round,
     gp_career = sum(gp),
     gp_by_season = mean(gp),
     pts_career_avg = mean(pts),
@@ -194,6 +201,8 @@ data_recent_player_career <- data_recent_player %>%
   summarise(
     player_height = mean(player_height),
     player_weight = mean(player_weight),
+    country = country,
+    draft_round = draft_round,
     gp_career = sum(gp),
     gp_by_season = mean(gp),
     pts_career_avg = mean(pts),
@@ -223,13 +232,24 @@ dim(data_recent_player_career)
 On peut constater la présence de duplicates, on va donc en conserver qu'une ligne pour chaque joueur ce qui est normal.
 
 ```{r}
-# Supprimer les doublons de data_old_player_career
-data_old_player_career <- distinct(data_old_player_career)
+# Supprimer les doublons en conservant une seule occurrence pour chaque joueur
+data_old_player_career <- data_old_player_career %>%
+  distinct(player_name, .keep_all = TRUE)
 
-# Supprimer les doublons de data_recent_player_career
-data_recent_player_career <- distinct(data_recent_player_career)
+# Supprimer les doublons en conservant une seule occurrence pour chaque joueur
+data_recent_player_career <- data_recent_player_career %>%
+  distinct(player_name, .keep_all = TRUE)
 
-head(data_old_player_career)
+# Remplacer les valeurs "Undrafted" par -1 dans la colonne draft_round de data_old_player_career
+data_old_player_career$draft_round <- ifelse(data_old_player_career$draft_round == "Undrafted", -1, data_old_player_career$draft_round)
+data_old_player_career$draft_round <- as.numeric(data_old_player_career$draft_round)
+
+# Remplacer les valeurs "Undrafted" par -1 dans la colonne draft_round de data_recent_player_career
+data_recent_player_career$draft_round <- ifelse(data_recent_player_career$draft_round == "Undrafted", -1, data_recent_player_career$draft_round)
+data_recent_player_career$draft_round <- as.numeric(data_recent_player_career$draft_round)
+
+
+data_old_player_career
 head(data_recent_player_career)
 
 dim(data_old_player_career)
@@ -263,6 +283,8 @@ data_present_NBA = read.csv2("data_recent_player_career.csv", sep=",", dec=".", 
 data_past_NBA$hall_of_fame <- ifelse(data_past_NBA$hall_of_fame == 1, "Yes", "No")
 data_past_NBA$hall_of_fame <- as.factor(data_past_NBA$hall_of_fame)
 data_past_NBA$indiv_awards <- as.factor(data_past_NBA$indiv_awards)
+data_past_NBA$country <- as.factor(data_past_NBA$country)
+data_past_NBA$draft_round <- as.numeric(data_past_NBA$draft_round)
 
 # Trouver les colonnes de type entier
 int_columns <- sapply(data_past_NBA, is.integer)
@@ -273,6 +295,8 @@ data_past_NBA[int_columns] <- lapply(data_past_NBA[int_columns], as.numeric)
 data_present_NBA$hall_of_fame <- ifelse(data_present_NBA$hall_of_fame == 1, "Yes", "No")
 data_present_NBA$hall_of_fame <- as.factor(data_present_NBA$hall_of_fame)
 data_present_NBA$indiv_awards <- as.factor(data_present_NBA$indiv_awards)
+data_present_NBA$country <- as.factor(data_present_NBA$country)
+data_present_NBA$draft_round <- as.numeric(data_present_NBA$draft_round)
 
 # Trouver les colonnes de type entier
 int_columns <- sapply(data_present_NBA, is.integer)
@@ -426,7 +450,7 @@ class=1*(pred>0.5)
 # pred
 class
 ```
-D'après les observations des prochaines cellules, on verra que (Allen Iverson, David Robinson) on bien pris la valeur 1 contrairement à (Dominique Wilkins, Bobby Jones, Dino Radja) pour des raisons déjà mentionnées et des données manquantes de leur année de basket avant 1996.
+D'après les observations des prochaines cellules, on verra que (Allen Iverson, David Robinson et Dominique Wilkins) on bien pris la valeur 1 contrairement à (Bobby Jones, Dino Radja) pour des raisons déjà mentionnées et des données manquantes de leur année de basket avant 1996.
 
 On regarde la même chose pour les joueurs récents :
 ```{r}
@@ -435,7 +459,7 @@ class=1*(pred>0.5)
 # pred
 class
 ```
-Sur ces prédictions couplées de nos connaissances complètes sur la NBA, on peut donc dire que la plupart des décisions des valeurs binaires est globalement correcte et tolérable. (les 4 joueurs du Hall_of_Fame intronisés en 2023 possèdent bien la valeur 1, mais des joueurs comme 'Draymond Green','Al Horford' ont pour avis personnel très peu de possibilité d'intrégrer le hof. Pour les valeurs 0, certains éléments peuvent justifier ce résultat comme le nombre de saisons effectué).
+Sur ces prédictions couplées de nos connaissances complètes sur la NBA, on peut donc dire que la plupart des décisions des valeurs binaires est globalement correcte et tolérable. (les 4 joueurs du Hall_of_Fame intronisés en 2023 possèdent bien la valeur 1, mais des joueurs comme 'Nicola Batum', 'Kyle Lowry',  'Al Horford' ont pour avis personnel très peu de possibilité d'intrégrer le hof (inversement pour 'Kawhi Leonard', 'Anthony Edwards'). Pour les valeurs 0, certains éléments peuvent justifier ce résultat comme le nombre de saisons effectué).
 
 
 Après avoir exécuter la vérification de l'impacte de l'AIC, on regarde désormais les erreurs de prévisions du nouveau modèle avec toutes les colonnes pour les différentes méthodes de classification (peut être faire de même avec les colonnes sélectionnées par res_AIC).
@@ -630,19 +654,6 @@ table(data.test$hall_of_fame,pred_cart)
 On continue l'affichage des valeurs AUC :
 
 ```{r}
-#proba a posteriori de succes (dans la deuxième colonne) : 
-pred_lda <- predict(res.lda,newdata=data.test)$posterior[,2] 
-
-ROC_lda <- roc(data.test$hall_of_fame, pred_lda)
-plot(ROC_lda, print.auc=TRUE,col='red')
-ROC_lda$auc
-
-# aire sous courbe ROC
-pred_RF = predict(fit_RF, data.test, type="prob")[,2] 
-ROC_RF <- roc(data.test$hall_of_fame, pred_RF)
-lines(ROC_RF, print.auc=TRUE, col='blue')
-ROC_RF$auc
-
 ## aire sous courbe ROC
 pred_cart = predict(arbre.opt, data.test, type="class")
 acc_CART = mean(pred_cart == data.test$hall_of_fame)
@@ -651,8 +662,21 @@ pred_cart = predict(arbre.opt, data.test, type="prob")[,2]
 acc_CART
 
 ROC_cart <- roc(data.test$hall_of_fame, pred_cart)
-lines(ROC_cart, print.auc=TRUE, col='green')
+plot(ROC_cart, print.auc=TRUE, col='green')
 ROC_cart$auc
+
+#proba a posteriori de succes (dans la deuxième colonne) : 
+pred_lda <- predict(res.lda,newdata=data.test)$posterior[,2] 
+
+ROC_lda <- roc(data.test$hall_of_fame, pred_lda)
+lines(ROC_lda, print.auc=FALSE,col='red')
+ROC_lda$auc
+
+# aire sous courbe ROC
+pred_RF = predict(fit_RF, data.test, type="prob")[,2] 
+ROC_RF <- roc(data.test$hall_of_fame, pred_RF)
+lines(ROC_RF, print.auc=FALSE, col='blue')
+ROC_RF$auc
 ```
 
 4. Adaboost
@@ -672,11 +696,23 @@ table(data.test$hall_of_fame,1*(pred_adaboost > 0.5))
 On continue l'affichage des valeurs AUC :
 
 ```{r}
+## prédiction : 
+pred_adaboost = predict(fit.adaboost, newdata=data.test, type = "response", n.trees = B.opt)
+tab_ada = table(data.test$hall_of_fame,1*(pred_adaboost > 0.5))
+tab_ada
+acc_AdB = (tab_ada[1,1]+tab_ada[2,2])/(tab_ada[1,1]+tab_ada[1,2]+tab_ada[2,1]+tab_ada[2,2])
+acc_AdB
+
+## aire sous courbe ROC
+ROC_adaboost <- roc(data.test$hall_of_fame, pred_adaboost)
+plot(ROC_adaboost, print.auc = TRUE, col='orange')
+ROC_adaboost$auc
+
 #proba a posteriori de succes (dans la deuxième colonne) : 
 pred_lda <- predict(res.lda,newdata=data.test)$posterior[,2] 
 
 ROC_lda <- roc(data.test$hall_of_fame, pred_lda)
-plot(ROC_lda, print.auc=TRUE,col='red')
+lines(ROC_lda, print.auc=TRUE,col='red')
 ROC_lda$auc
 
 # aire sous courbe ROC
@@ -695,18 +731,6 @@ acc_CART
 ROC_cart <- roc(data.test$hall_of_fame, pred_cart)
 lines(ROC_cart, print.auc=TRUE, col='green')
 ROC_cart$auc
-
-## prédiction : 
-pred_adaboost = predict(fit.adaboost, newdata=data.test, type = "response", n.trees = B.opt)
-tab_ada = table(data.test$hall_of_fame,1*(pred_adaboost > 0.5))
-tab_ada
-acc_AdB = mean(1*(pred_adaboost > 0.5) == data.test$hall_of_fame)
-acc_AdB
-
-## aire sous courbe ROC
-ROC_adaboost <- roc(data.test$hall_of_fame, pred_adaboost)
-lines(ROC_adaboost, print.auc = TRUE, col='orange')
-ROC_adaboost$auc
 ```
 5. Regression Lasso
 
@@ -716,7 +740,7 @@ library(glmnet)
 res_Lasso <- glmnet(as.matrix(data.train.balanced[,-1]),data.train.balanced$hall_of_fame,family='binomial') 
 plot(res_Lasso, label = TRUE)  # en abscisse : norme des coefficients
 plot(res_Lasso, xvar = "lambda", label = TRUE) # en abscisse : log(lambda)
-sum(coef(res_Lasso, s=exp(-4))!=0)
+sum(coef(res_Lasso, s=exp(-3))!=0)
 ```
 On regarde le lambda optimal pour cette régression
 
@@ -736,11 +760,18 @@ acc_regLog = mean(class_logit_lasso == data.test$hall_of_fame)
 acc_regLog
 ```
 ```{r}
+#courbe ROC
+pred_logit_lasso=predict(cvLasso, newx = as.matrix(data.test[,-1]), s = 'lambda.min', type = "response")
+#pred_logit_lasso
+ROC_logit_lasso = roc( data.test$hall_of_fame, pred_logit_lasso)
+plot(ROC_logit_lasso,print.auc=TRUE,col='lightblue')
+ROC_logit_lasso$auc
+
 #proba a posteriori de succes (dans la deuxième colonne) : 
 pred_lda <- predict(res.lda,newdata=data.test)$posterior[,2] 
 
 ROC_lda <- roc(data.test$hall_of_fame, pred_lda)
-plot(ROC_lda, print.auc=TRUE,col='red')
+lines(ROC_lda, print.auc=TRUE,col='red')
 ROC_lda$auc
 
 # aire sous courbe ROC
@@ -771,13 +802,6 @@ acc_AdB
 ROC_adaboost <- roc(data.test$hall_of_fame, pred_adaboost)
 lines(ROC_adaboost, print.auc = TRUE, col='orange')
 ROC_adaboost$auc
-
-#courbe ROC
-pred_logit_lasso=predict(cvLasso, newx = as.matrix(data.test[,-1]), s = 'lambda.min', type = "response")
-#pred_logit_lasso
-ROC_logit_lasso = roc( data.test$hall_of_fame, pred_logit_lasso)
-lines(ROC_logit_lasso,print.auc=TRUE,col='lightblue')
-ROC_logit_lasso$auc
 ```
 On analyse le meilleur modèle à utiliser
 
@@ -796,26 +820,19 @@ apply(result,1, which.max)
 Affichage final des 5 méthodes de classification.
 
 ```{r}
-plot(ROC_lda, xlim=c(1,0))
-plot(ROC_cart, add=TRUE, col=2)
-plot(ROC_RF, add=TRUE, col=3)
-plot(ROC_adaboost, add=TRUE, col=4)
-plot(ROC_logit_lasso, add=TRUE, col=5)
+plot(ROC_lda, xlim=c(1,0),col=2)
+plot(ROC_cart, add=TRUE, col=3)
+plot(ROC_RF, add=TRUE, col=4)
+plot(ROC_adaboost, add=TRUE, col=5)
+plot(ROC_logit_lasso, add=TRUE, col=6)
 legend('bottom', col=1:4, paste(c('lda', 'cart', 'RF', "ada", 'logit_lasso')),  lwd=1)
 ```
 Après analyse et comparaison des multiples modèles testés, on constate qu'à la suite de l'équilibrage de notre jeu de données avec la fonction SMOTE, on a utilisé 5 méthodes de classification et avec la visualisation du critère AUC ainsi que la comparaison des valeurs d'accuracy et d'AUC, on constate que 2 modèles se dégagent de ceci avec le modèle CART et de régression lasso. Mais en analysant les matrices de confusion de chacune des méthodes, nous rajouterons le modèle LDA qui nous a donné pour data.test les meilleurs résultats pour la valeurs 'Yes'.
 
 On va désormais appliquer ces trois modèles entrainés avec les données rééquilibrées par la fonction SMOTE. Avant cela, il faudra enlever la colonne hall_of fame pour rajouter la valeur de ces prédictions par ces 3 méthodes.
 
-Maintenant on applique les 3 méthodes sélectionnées (CART, lasso, LDA) puis on rajoutera dans de nouvelle colonnes ces valeurs de prédictions :
+Maintenant on applique les 3 méthodes sélectionnées (CART, RF, LDA) puis on rajoutera dans de nouvelle colonnes ces valeurs de prédictions :
 
-1. Lasso
-
-On calcule les prédictions pour les joueurs à l'aide de la méthode Lasso
-
-```{r}
-pred_lasso_NBA = predict(cvLasso, newx = as.matrix(data_present_NBA[,-1]), s = 'lambda.min', type = "class")
-```
 On peut désormais supprimer la colonne hall_of_fame de cette database étant donner que toutes les valeurs seront 'No' alors que notre but est de prédire la possibilité à un joueur d'intégrer le mémorial du Hall of Fame. 
 
 ```{r}
@@ -823,18 +840,25 @@ On peut désormais supprimer la colonne hall_of_fame de cette database étant do
 data_present_NBA <- subset(data_present_NBA, select = -c(hall_of_fame))
 ```
 
-2. LDA
+1. LDA
 
 On calcule les prédictions pour les joueurs à l'aide de la méthode LDA
 ```{r}
 pred_lda_NBA = predict(res.lda,data_present_NBA)$class
 ```
 
-3. CART
+2. CART
 
 On calcule les prédictions pour les joueurs à l'aide de la méthode CART
 ```{r}
 pred_cart_NBA = predict(arbre.opt,newdata=data_present_NBA,type = 'class')
+```
+
+3. RF
+
+On calcule les prédictions pour les joueurs à l'aide de la méthode RF
+```{r}
+pred_RF_NBA = predict(fit_RF,newdata=data_present_NBA,type = 'class')
 ```
 
 Une fois ces prédictions réalisées, nous pouvons les rajoutées à la database (data_present_NBA) pour les analyser.
@@ -862,27 +886,20 @@ Après avoir feuilleté la database en regardant le nom des joueurs ayant la val
 
 
 ```{r}
-data_present_NBA_trash = data_present_NBA
-data_present_NBA_trash$HoF_lasso = pred_lasso_NBA
+data_present_NBA$HoF_RF = pred_RF_NBA
 
-nb_colonnes <- ncol(data_present_NBA_trash)
+nb_colonnes <- ncol(data_present_NBA)
 
 # Sélectionner les valeurs de la dernière colonne
-derniere_colonne <- data_present_NBA_trash[, nb_colonnes]
+derniere_colonne <- data_present_NBA[, nb_colonnes]
 
 # Créer un dataframe avec les noms des joueurs et la dernière colonne
-resultat <- data.frame(Joueur_NBA = noms_joueurs, Hall_of_Fame_Lasso = derniere_colonne)
-resultat <- subset(resultat, select = -c(Joueur_NBA))
-
-resultat <- resultat %>%
-  rename(Hall_of_Fame_Lasso = lambda.min)
+resultat <- data.frame(Joueur_NBA = noms_joueurs, Hall_of_Fame_RF = derniere_colonne)
 
 # Afficher le résultat
 print(resultat)
-
-data_present_NBA$HoF_Lasso = resultat$Hall_of_Fame_Lasso
 ```
-Après avoir feuilleté la database en regardant le nom des joueurs ayant la valeur 'Yes' pour la nouvelle colonne 'HoF_Lasso', on constate qu'il y a plus de joueurs possédant cette valeur dont certains n'auront probablement jamais cette distinction différent de la colonne 'HoF_lda'. En revanche, tous les joueurs ayant une probabilité plus élevée que les autres sont bels et bien sélectionnés dans la valeur 'Yes' (comme les 4 joueurs ayant été intronisés en 2023 (Tony Parker, Dirk Nowitzki, Dwyane Wade, Pau Gasol)) où encore des joueurs actuels où l'on peut être sûr de leur futur intronisation (LeBron James, Stephen Curry, Kevin Durant, Kawhi Leonard, Giannis Antetokounmpo, Nikola Jokic, Luka Doncic, Joel Embiid...). Egalement, tous les autres joueurs possédant la valeur 'Yes' sont connus et ont effectué des saisons marquantes en NBA même s'ils ont peu de chance d'y être intronisés. 
+Après avoir feuilleté la database en regardant le nom des joueurs ayant la valeur 'Yes' pour la nouvelle colonne 'HoF_RF', on constate qu'il y a plus de joueurs possédant cette valeur dont certains n'auront probablement jamais cette distinction différent de la colonne 'HoF_lda'. En revanche, tous les joueurs ayant une probabilité plus élevée que les autres sont bels et bien sélectionnés dans la valeur 'Yes' (comme les 4 joueurs ayant été intronisés en 2023 (Tony Parker, Dirk Nowitzki, Dwyane Wade, Pau Gasol)) où encore des joueurs actuels où l'on peut être sûr de leur futur intronisation (LeBron James, Stephen Curry, Kevin Durant, Kawhi Leonard, Giannis Antetokounmpo, Nikola Jokic, Luka Doncic, Joel Embiid...). Egalement, tous les autres joueurs possédant la valeur 'Yes' sont connus et ont effectué des saisons marquantes en NBA même s'ils ont peu de chance d'y être intronisés. 
 
 
 ```{r}
@@ -904,6 +921,8 @@ Après avoir feuilleté la database en regardant le nom des joueurs ayant la val
 Maintenant l'affichage de notre database des récents joueurs avec les résultats des prédictions :
 
 ```{r}
+data_present_NBA$indiv_awards <- data_recent_player_career$indiv_awards
+data_present_NBA$indiv_awards <- as.numeric(data_present_NBA$indiv_awards)
 data_present_NBA
 ```
 
@@ -911,12 +930,61 @@ Pour conclure sur les joueurs ayant la plus grande chance d'être intronisés au
 
 ```{r}
 # Filtrer les joueurs pour lesquels les trois colonnes ont la valeur "Yes"
-joueurs_HoF <- subset(data_present_NBA, HoF_lda == "Yes" & HoF_Lasso == "Yes" & HoF_CART == "Yes")
+joueurs_HoF <- subset(data_present_NBA, HoF_lda == "Yes" & HoF_RF == "Yes" & HoF_CART == "Yes")
 
 # Afficher les données des joueurs correspondants
 print(joueurs_HoF)
 ```
-Voici les joueurs qui ont été validés par les 3 méthodes de classification. Sur ces joueurs les 4 intronisés au Hall of Fame en 2023 sont présents et un bon nombre d'entre eux ont une possibilité de l'intégrer après leur passage en NBA sauf pour quelques uns d'autres eux (Andrew Bogut même s'il a gagné 3 NBA Championship avec Golden State Warrior, Danilo Gallinari, Elijah Bryant, Luol Deng, Ryan Anderson) pour d'autres le fait que leur carrière soit en début et/ou loin de la fin nous empêche de conclure sur la véracité des prédicitions.
+Voici les joueurs qui ont été validés par les 3 méthodes de classification. Sur ces joueurs les 4 intronisés au Hall of Fame en 2023 sont présents et un bon nombre d'entre eux ont une possibilité de l'intégrer après leur passage en NBA sauf pour quelques uns d'autres eux (Danilo Gallinari, DeMarcus Cousins, Eric Gordon, Jamal Crawford, Luol Deng, Tyreke Evans) pour d'autres le fait que leur carrière soit en début et/ou loin de la fin nous empêche de conclure sur la véracité des prédicitions.
 
-De plus certains joueurs n'ayant pas reçu la prédicition 'Yes' pour les 3 méthodes peuvent très bien accéder au mémorial du Hall of Fame (Anthony Edwards, Jalen Brunson...)
+De plus certains joueurs n'ayant pas reçu la prédicition 'Yes' pour les 3 méthodes peuvent très bien accéder au mémorial du Hall of Fame (Anthony Edwards, De'Aaron Fox, Jalen Brunson...).
 
+Il y a certains joueurs importants manquants dans la database comme 'Nikola Jokić', 'Luka Dončić' ou encore 'Goran Dragić' dû à la présence de caractères spéciaux 'č' et 'ć' dans leur nom de fammille.
+
+# 2. Visualisation des prédictions pour le Hall of Fame
+
+Visualisation pour les joueurs retirés avant 2018 : (relance tout le code et non juste la cellule)
+
+```{r}
+library(FactoMineR)
+library(ggplot2)
+
+# Convertir la variable hall_of_fame en facteur
+data_old_player_career$hall_of_fame <- factor(data_old_player_career$hall_of_fame, levels = c(0, 1), labels = c("Out", "In"))
+
+# Effectuer l'analyse en composantes principales (PCA)
+res_old_player_career <- PCA(data_old_player_career[,2:22], quali.sup = c(3,16))
+# Définir les couleurs pour les modalités de la variable qualitative
+colors <- c("In" = "blue", "Out" = "red")
+
+# Utiliser les couleurs spécifiées lors de la visualisation
+plot.PCA(res_old_player_career, select = "cos2 0.8", habillage = 16, col.hab = colors)
+```
+On observe que les joueurs qui sont au Hall of Fame se retrouve très majoritairement sur le côté droit du graphe des individus de la PCA. On voit que la Dim.1 représente globalement le niveau des joueurs durant leur carrière, à gauche les joueurs faibles avec peu d'impact et à droite, les joueurs impactant et très bon durant toute leur carrière. Pour la Dim.2, on constate que les joueurs en haut sont les intérieurs (pivot P, ailier fort AF), au milieu les joueurs au physique polyvalent (ailier AI) et en bas les extérieurs (meneur de jeu MJ, arrière A).
+
+Après cette observation sur les joueurs retirés avant 2018, on regarde le comportement des attributions des valeurs de la colonne hall_of_fame suite à la classification supervisée.
+
+```{r}
+# Créer la colonne hall_of_fame
+data_present_NBA$hall_of_fame <- ifelse(data_present_NBA$HoF_lda == "Yes" & 
+                                        data_present_NBA$HoF_CART == "Yes" & 
+                                        data_present_NBA$HoF_RF == "Yes", 
+                                        "In", "Out")
+data_present_NBA$hall_of_fame <- as.factor(data_present_NBA$hall_of_fame)
+data_present_NBA <- subset(data_present_NBA,select = -c(HoF_lda,HoF_RF,HoF_CART))
+data_present_NBA
+```
+
+```{r}
+# Effectuer l'analyse en composantes principales (PCA)
+res_recent_player_career <- PCA(data_present_NBA, quali.sup = c(3,21))
+# Définir les couleurs pour les modalités de la variable qualitative
+colors <- c("In" = "blue", "Out" = "red")
+
+# Utiliser les couleurs spécifiées lors de la visualisation
+plot.PCA(res_recent_player_career, select = "cos2 0.77", habillage = 21, col.hab = colors)
+```
+On constate que les joueurs dont leur prédiction d'intronisation au Hall of Fame se trouve également sur la droite.
+Pour faire simple, l'analyse et la comparaison des résultats entre les anciens joueurs et nouveaux sera facile étant donné que les 2 cercles de corrélation sont identiques (quasi) donc on a les mêmes conclusions sur les rôles des dimensions. Donc on voit que le comportement des prédictions correspond à ce qui a été attribué aux anciens joueurs. Il y a quelques points rouges et bleus mélangés qui montrent les légères incertitudes des prédictions. Mais globalement, sur ces 2 graphiques, nous avons le même comportement d'attribution pour le Hall of Fame des anciens et nouveaux joueurs.
+
+Notre modèle généré est donc satisfaisant par rapport à nos résultats et analyses graphiques.
