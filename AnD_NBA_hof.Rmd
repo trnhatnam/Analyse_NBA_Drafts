@@ -921,6 +921,8 @@ Après avoir feuilleté la database en regardant le nom des joueurs ayant la val
 Maintenant l'affichage de notre database des récents joueurs avec les résultats des prédictions :
 
 ```{r}
+data_present_NBA$indiv_awards <- data_recent_player_career$indiv_awards
+data_present_NBA$indiv_awards <- as.numeric(data_present_NBA$indiv_awards)
 data_present_NBA
 ```
 
@@ -939,3 +941,50 @@ De plus certains joueurs n'ayant pas reçu la prédicition 'Yes' pour les 3 mét
 
 Il y a certains joueurs importants manquants dans la database comme 'Nikola Jokić', 'Luka Dončić' ou encore 'Goran Dragić' dû à la présence de caractères spéciaux 'č' et 'ć' dans leur nom de fammille.
 
+# 2. Visualisation des prédictions pour le Hall of Fame
+
+Visualisation pour les joueurs retirés avant 2018 : (relance tout le code et non juste la cellule)
+
+```{r}
+library(FactoMineR)
+library(ggplot2)
+
+# Convertir la variable hall_of_fame en facteur
+data_old_player_career$hall_of_fame <- factor(data_old_player_career$hall_of_fame, levels = c(0, 1), labels = c("Out", "In"))
+
+# Effectuer l'analyse en composantes principales (PCA)
+res_old_player_career <- PCA(data_old_player_career[,2:22], quali.sup = c(3,16))
+# Définir les couleurs pour les modalités de la variable qualitative
+colors <- c("In" = "blue", "Out" = "red")
+
+# Utiliser les couleurs spécifiées lors de la visualisation
+plot.PCA(res_old_player_career, select = "cos2 0.8", habillage = 16, col.hab = colors)
+```
+On observe que les joueurs qui sont au Hall of Fame se retrouve très majoritairement sur le côté droit du graphe des individus de la PCA. On voit que la Dim.1 représente globalement le niveau des joueurs durant leur carrière, à gauche les joueurs faibles avec peu d'impact et à droite, les joueurs impactant et très bon durant toute leur carrière. Pour la Dim.2, on constate que les joueurs en haut sont les intérieurs (pivot P, ailier fort AF), au milieu les joueurs au physique polyvalent (ailier AI) et en bas les extérieurs (meneur de jeu MJ, arrière A).
+
+Après cette observation sur les joueurs retirés avant 2018, on regarde le comportement des attributions des valeurs de la colonne hall_of_fame suite à la classification supervisée.
+
+```{r}
+# Créer la colonne hall_of_fame
+data_present_NBA$hall_of_fame <- ifelse(data_present_NBA$HoF_lda == "Yes" & 
+                                        data_present_NBA$HoF_CART == "Yes" & 
+                                        data_present_NBA$HoF_RF == "Yes", 
+                                        "In", "Out")
+data_present_NBA$hall_of_fame <- as.factor(data_present_NBA$hall_of_fame)
+data_present_NBA <- subset(data_present_NBA,select = -c(HoF_lda,HoF_RF,HoF_CART))
+data_present_NBA
+```
+
+```{r}
+# Effectuer l'analyse en composantes principales (PCA)
+res_recent_player_career <- PCA(data_present_NBA, quali.sup = c(3,21))
+# Définir les couleurs pour les modalités de la variable qualitative
+colors <- c("In" = "blue", "Out" = "red")
+
+# Utiliser les couleurs spécifiées lors de la visualisation
+plot.PCA(res_recent_player_career, select = "cos2 0.77", habillage = 21, col.hab = colors)
+```
+On constate que les joueurs dont leur prédiction d'intronisation au Hall of Fame se trouve également sur la droite.
+Pour faire simple, l'analyse et la comparaison des résultats entre les anciens joueurs et nouveaux sera facile étant donné que les 2 cercles de corrélation sont identiques (quasi) donc on a les mêmes conclusions sur les rôles des dimensions. Donc on voit que le comportement des prédictions correspond à ce qui a été attribué aux anciens joueurs. Il y a quelques points rouges et bleus mélangés qui montrent les légères incertitudes des prédictions. Mais globalement, sur ces 2 graphiques, nous avons le même comportement d'attribution pour le Hall of Fame des anciens et nouveaux joueurs.
+
+Notre modèle généré est donc satisfaisant par rapport à nos résultats et analyses graphiques.
