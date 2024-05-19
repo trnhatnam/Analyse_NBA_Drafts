@@ -825,7 +825,7 @@ plot(ROC_cart, add=TRUE, col=3)
 plot(ROC_RF, add=TRUE, col=4)
 plot(ROC_adaboost, add=TRUE, col=5)
 plot(ROC_logit_lasso, add=TRUE, col=6)
-legend('bottom', col=1:4, paste(c('lda', 'cart', 'RF', "ada", 'logit_lasso')),  lwd=1)
+legend('bottom', col=2:6, paste(c('lda', 'cart', 'RF', "ada", 'logit_lasso')),  lwd=1)
 ```
 Après analyse et comparaison des multiples modèles testés, on constate qu'à la suite de l'équilibrage de notre jeu de données avec la fonction SMOTE, on a utilisé 5 méthodes de classification et avec la visualisation du critère AUC ainsi que la comparaison des valeurs d'accuracy et d'AUC, on constate que 2 modèles se dégagent de ceci avec le modèle CART et de régression lasso. Mais en analysant les matrices de confusion de chacune des méthodes, nous rajouterons le modèle LDA qui nous a donné pour data.test les meilleurs résultats pour la valeurs 'Yes'.
 
